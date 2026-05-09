@@ -1,33 +1,50 @@
 import { useEffect } from 'react';
-import { socket } from '../services/socket';
+import { apiService } from '../services/api';
 import { useAppStore } from '../store/useAppStore';
 
 export function useRealtime() {
-  const { setSnapshot, setStatus, addLog, clearLogs, setUser, showOtp, hideOtp, notify } = useAppStore();
+  const { setSnapshot, setStatus, notify } = useAppStore();
 
   useEffect(() => {
-    socket.on('snapshot', setSnapshot);
-    socket.on('status:update', setStatus);
-    socket.on('log:new', addLog);
-    socket.on('logs:clear', clearLogs);
-    socket.on('user:update', setUser);
-    socket.on('otp:request', () => {
-      showOtp();
-      notify({ type: 'warning', message: 'تم طلب رمز OTP الآن' });
-    });
-    socket.on('otp:received', () => {
-      hideOtp();
-      notify({ type: 'success', message: 'تم إرسال رمز OTP بنجاح' });
-    });
+    let active = true;
+
+    async function loadSnapshot() {
+      try {
+        const snapshot = await apiService.snapshot();
+        if (active) setSnapshot(snapshot);
+      } catch (error) {
+        if (active) notify({ type: 'error', message: 'تعذر الاتصال بسيرفر Railway' });
+      }
+    }
+
+    async function refreshStatus() {
+      try {
+        const status = await apiService.status();
+        if (active) setStatus(status);
+      } catch {
+        if (active) {
+          setStatus({
+            server: 'offline',
+            playwright: 'idle',
+            bot: 'offline',
+            monitoring: false,
+            registration: 'تعذر الاتصال بسيرفر Railway',
+            lastCheck: new Date().toISOString(),
+            checkSpeed: 0,
+            attempts: 0,
+            currentWilaya: 'سوق أهراس',
+            otpRequested: false
+          });
+        }
+      }
+    }
+
+    loadSnapshot();
+    const timer = window.setInterval(refreshStatus, 15000);
 
     return () => {
-      socket.off('snapshot', setSnapshot);
-      socket.off('status:update', setStatus);
-      socket.off('log:new', addLog);
-      socket.off('logs:clear', clearLogs);
-      socket.off('user:update', setUser);
-      socket.off('otp:request');
-      socket.off('otp:received');
+      active = false;
+      window.clearInterval(timer);
     };
-  }, [setSnapshot, setStatus, addLog, clearLogs, setUser, showOtp, hideOtp, notify]);
+  }, [setSnapshot, setStatus, notify]);
 }

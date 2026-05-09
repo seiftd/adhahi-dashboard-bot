@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { apiService } from '../services/api';
-import { socket } from '../services/socket';
 import { useAppStore } from '../store/useAppStore';
 import { Button } from './Button';
 
@@ -23,9 +22,7 @@ export function OtpModal() {
   async function submit() {
     setLoading(true);
     try {
-      await new Promise((resolve, reject) => {
-        socket.emit('otp:submit', otp, (response) => (response?.ok ? resolve(response) : reject(new Error(response?.error))));
-      }).catch(() => apiService.submitOtp(otp));
+      await apiService.submitOtp(otp);
       notify({ type: 'success', message: 'تم إرسال الرمز بنجاح' });
       hideOtp();
       setOtp('');
