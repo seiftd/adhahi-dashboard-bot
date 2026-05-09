@@ -8,4 +8,5 @@ logs/*.log
 screenshots/*.png
 screenshots/*.jpg
 *.pid
+.debug*
 .DS_Store
