@@ -10,7 +10,6 @@ const SEARCH_PLACEHOLDERS = {
 };
 
 let isMonitoring = false;
-let monitorTimer = null;
 let alertInterval = null;
 let userChatId = null;
 let lastCheck = null;
@@ -49,7 +48,29 @@ function getStatus() {
   };
 }
 
+async function safeGoto(page, url) {
+  for (let i = 0; i < 3; i += 1) {
+    try {
+      await page.goto(url, {
+        waitUntil: 'domcontentloaded',
+        timeout: 15000
+      });
+      return true;
+    } catch (error) {
+      console.log('Retry...', i);
+      logger.warn('Retrying page load', {
+        attempt: i + 1,
+        error: error.message
+      });
+    }
+  }
+
+  return false;
+}
+
 async function findAndFillSearch(page) {
+  await page.fill('input', config.targetWilaya).then(() => true).catch(() => false);
+
   const selectors = [
     'input[type="search"]',
     `input[placeholder*="${SEARCH_PLACEHOLDERS.wilaya}"]`,
@@ -81,12 +102,6 @@ async function findAndFillSearch(page) {
 }
 
 async function checkAvailability() {
-  if (isChecking) return available;
-
-  isChecking = true;
-  lastCheck = new Date().toISOString();
-  lastError = null;
-
   let context;
 
   try {
@@ -98,18 +113,23 @@ async function checkAvailability() {
     const { context: browserContext, page } = await createPage();
     context = browserContext;
 
-    await page.goto(config.targetUrl, {
-      waitUntil: 'networkidle',
-      timeout: 45000
-    });
+    const ok = await safeGoto(page, process.env.TARGET_URL || config.targetUrl);
+    if (!ok) {
+      lastError = 'Failed to load page';
+      return false;
+    }
 
     await page.waitForSelector('body', { state: 'visible', timeout: 15000 });
     await findAndFillSearch(page);
-    await page.waitForTimeout(2500);
+    await page.waitForTimeout(2000);
 
-    const pageText = await page.locator('body').innerText({ timeout: 10000 }).catch(() => '');
-    const unavailableTextExists = pageText.includes(UNAVAILABLE_TEXT);
-    available = !unavailableTextExists;
+    const text = await page.content();
+
+    if (text.includes(UNAVAILABLE_TEXT)) {
+      available = false;
+    } else {
+      available = true;
+    }
 
     lastScreenshot = await page.screenshot({
       fullPage: true,
@@ -119,7 +139,6 @@ async function checkAvailability() {
 
     logger.info('Availability check finished', {
       available,
-      unavailableTextExists,
       lastCheck
     });
 
@@ -165,11 +184,44 @@ function startAlertSpam() {
 async function monitorTick() {
   if (!isMonitoring) return;
 
+  if (isChecking) return;
+
+  isChecking = true;
+  lastCheck = new Date().toISOString();
+  lastError = null;
+
   const isAvailable = await checkAvailability();
+  isChecking = false;
+
   if (!isAvailable) return;
 
   await sendAvailabilityAlert('\ud83d\udea8 \u0645\u062a\u0648\u0641\u0631 !!!');
   startAlertSpam();
+}
+
+async function startMonitoringLoop() {
+  while (isMonitoring) {
+    if (!isChecking) {
+      isChecking = true;
+      lastCheck = new Date().toISOString();
+      lastError = null;
+
+      try {
+        const isAvailable = await checkAvailability();
+        if (isAvailable) {
+          await sendAvailabilityAlert('\ud83d\udea8 \u0645\u062a\u0648\u0641\u0631 !!!');
+          startAlertSpam();
+        }
+      } catch (error) {
+        lastError = error.message;
+        logger.error('Monitoring loop failed', { error: error.message });
+      }
+
+      isChecking = false;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
 }
 
 function startMonitoring(chatId) {
@@ -181,8 +233,7 @@ function startMonitoring(chatId) {
   lastError = null;
   logger.success('Monitoring started');
 
-  monitorTick();
-  monitorTimer = setInterval(monitorTick, config.checkInterval || 5000);
+  startMonitoringLoop();
 
   return getStatus();
 }
@@ -190,10 +241,8 @@ function startMonitoring(chatId) {
 function stopMonitoring() {
   isMonitoring = false;
 
-  if (monitorTimer) clearInterval(monitorTimer);
   if (alertInterval) clearInterval(alertInterval);
 
-  monitorTimer = null;
   alertInterval = null;
 
   logger.warn('Monitoring stopped');
@@ -211,5 +260,7 @@ module.exports = {
   stopMonitoring,
   getStatus,
   getLastScreenshot,
-  checkAvailability
+  checkAvailability,
+  startMonitoringLoop,
+  safeGoto
 };
