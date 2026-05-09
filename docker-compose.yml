@@ -1,0 +1,16 @@
+services:
+  adhahi-dashboard-bot:
+    build: .
+    container_name: adhahi-dashboard-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      HEADLESS: "true"
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./logs:/app/logs
+      - ./screenshots:/app/screenshots

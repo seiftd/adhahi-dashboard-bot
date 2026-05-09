@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Tajawal:wght@400;500;700;800&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  font-family: Cairo, Tajawal, sans-serif;
+  background: #020617;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  direction: rtl;
+  background: #020617;
+  color: #e0f2fe;
+  overflow-x: hidden;
+}
+
+.glass {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.82), rgba(15, 23, 42, 0.44));
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(18px);
+}
+
+.neon-border {
+  position: relative;
+}
+
+.neon-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.55), rgba(168, 85, 247, 0.42), transparent);
+  z-index: -1;
+  filter: blur(8px);
+  opacity: 0.55;
+}
+
+.rtl-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.rtl-scroll::-webkit-scrollbar-thumb {
+  background: rgba(34, 211, 238, 0.45);
+  border-radius: 999px;
+}

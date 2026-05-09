@@ -1,0 +1,11 @@
+node_modules
+dist
+client/dist
+.env
+.env.local
+.env.production
+logs/*.log
+screenshots/*.png
+screenshots/*.jpg
+*.pid
+.DS_Store
