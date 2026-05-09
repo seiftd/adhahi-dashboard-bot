@@ -1,5 +1,5 @@
 {
-  "name": "adhahi-backend",
+  "name": "adhahi-monitor",
   "version": "1.0.0",
   "main": "src/index.js",
   "type": "commonjs",
@@ -8,9 +8,8 @@
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "dotenv": "^16.4.0",
+    "dotenv": "^16.0.0",
     "express": "^4.18.2",
-    "node-telegram-bot-api": "^0.61.0",
     "playwright": "^1.40.0"
   }
 }

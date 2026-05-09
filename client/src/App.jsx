@@ -11,7 +11,7 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
-function availabilityLabel(status) {
+function getAvailability(status) {
   if (status.checking) return { text: '⏳ جاري الفحص', className: 'text-amber-200 bg-amber-400/10' };
   if (status.available) return { text: '🟢 متوفر', className: 'text-emerald-200 bg-emerald-400/10' };
   return { text: '🔴 غير متوفر', className: 'text-rose-200 bg-rose-400/10' };
@@ -20,39 +20,49 @@ function availabilityLabel(status) {
 export default function App() {
   const [status, setStatus] = useState({
     monitoring: false,
-    lastCheck: null,
     available: false,
     checking: false,
-    targetWilaya: 'سوق أهراس',
-    hasScreenshot: false,
-    lastScreenshotAt: null,
+    lastCheck: null,
     lastError: null
   });
   const [loading, setLoading] = useState('');
   const [error, setError] = useState('');
-  const [screenshotVersion, setScreenshotVersion] = useState(Date.now());
 
-  const availability = useMemo(() => availabilityLabel(status), [status]);
+  const availability = useMemo(() => getAvailability(status), [status]);
 
   async function refresh() {
     try {
       const nextStatus = await monitoringApi.getStatus();
       setStatus(nextStatus);
       setError('');
-      if (nextStatus.hasScreenshot) setScreenshotVersion(Date.now());
-    } catch (requestError) {
-      setError('تعذر الاتصال بسيرفر Railway');
+    } catch {
+      setError('❌ تعذر الاتصال بالسيرفر');
     }
   }
 
-  async function runAction(action) {
-    setLoading(action);
+  async function startMonitoring() {
+    setLoading('start');
     setError('');
     try {
-      const nextStatus = action === 'start' ? await monitoringApi.start() : await monitoringApi.stop();
-      setStatus(nextStatus);
-    } catch (requestError) {
-      setError('فشل تنفيذ الأمر، تحقق من السيرفر');
+      await monitoringApi.start();
+      setStatus((current) => ({ ...current, monitoring: true }));
+      await refresh();
+    } catch {
+      setError('❌ تعذر الاتصال بالسيرفر');
+    } finally {
+      setLoading('');
+    }
+  }
+
+  async function stopMonitoring() {
+    setLoading('stop');
+    setError('');
+    try {
+      await monitoringApi.stop();
+      setStatus((current) => ({ ...current, monitoring: false }));
+      await refresh();
+    } catch {
+      setError('❌ تعذر الاتصال بالسيرفر');
     } finally {
       setLoading('');
     }
@@ -79,7 +89,7 @@ export default function App() {
           <p className="text-sm font-bold text-cyan-300">Adhahi DZ Monitor</p>
           <h1 className="mt-2 text-3xl font-black text-white md:text-5xl">مراقبة توفر سوق أهراس</h1>
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-slate-400">
-            النظام يراقب صفحة أضاحي فقط، ولا يقوم بأي تسجيل أو تعبئة بيانات. عند التوفر يتم إرسال تنبيهات وصورة شاشة عبر Telegram.
+            الواجهة متصلة بالباك اند المحلي عبر ngrok، ويتم تحديث الحالة تلقائيًا كل 5 ثوانٍ.
           </p>
         </motion.header>
 
@@ -108,14 +118,14 @@ export default function App() {
 
           <div className="mt-6 grid gap-3 md:grid-cols-3">
             <button
-              onClick={() => runAction('start')}
+              onClick={startMonitoring}
               disabled={loading === 'start'}
               className="rounded-2xl bg-cyan-400 px-5 py-4 font-black text-slate-950 shadow-glow transition hover:bg-cyan-300 disabled:opacity-60"
             >
               {loading === 'start' ? 'جارٍ البدء...' : 'بدء المراقبة'}
             </button>
             <button
-              onClick={() => runAction('stop')}
+              onClick={stopMonitoring}
               disabled={loading === 'stop'}
               className="rounded-2xl bg-rose-500 px-5 py-4 font-black text-white transition hover:bg-rose-400 disabled:opacity-60"
             >
@@ -128,20 +138,6 @@ export default function App() {
               تحديث الحالة
             </button>
           </div>
-
-          {status.hasScreenshot && (
-            <div className="mt-7">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h2 className="text-lg font-black text-white">آخر لقطة شاشة</h2>
-                <span className="text-xs text-slate-400">{formatDate(status.lastScreenshotAt)}</span>
-              </div>
-              <img
-                src={`${monitoringApi.screenshotUrl()}?v=${screenshotVersion}`}
-                alt="آخر لقطة شاشة من موقع أضاحي"
-                className="max-h-[520px] w-full rounded-3xl border border-cyan-300/20 object-contain shadow-glow"
-              />
-            </div>
-          )}
         </motion.div>
       </section>
     </main>
