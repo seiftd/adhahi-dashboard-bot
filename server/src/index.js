@@ -1,73 +1,98 @@
-import path from 'path';
-import express from 'express';
-import http from 'http';
-import { Server } from 'socket.io';
-import cors from 'cors';
-import helmet from 'helmet';
-import compression from 'compression';
-import morgan from 'morgan';
-import { env } from './config/env.js';
-import { logger } from './utils/logger.js';
-import { apiRouter } from './routes/api.js';
-import { setupSockets } from './sockets/index.js';
-import { setupBot, stopBot } from './bot/bot.js';
-import { browserManager } from './browser/browserManager.js';
-import { setStatus } from './services/stateService.js';
-import { addLog } from './services/logService.js';
+const express = require('express');
+const cors = require('cors');
+const { config } = require('./config');
+const { logger } = require('./utils/logger');
+const { startBot, stopBot, notifyServerStarted } = require('./bot');
+const { closeBrowser } = require('./browser');
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST', 'DELETE'] }
-});
 
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors({ origin: true }));
-app.use(compression());
+app.use(cors({ origin: config.clientUrl || true }));
 app.use(express.json({ limit: '1mb' }));
-app.use(morgan('tiny'));
 
-app.use('/api', apiRouter);
-
-const clientDist = path.resolve('client/dist');
-app.use(express.static(clientDist));
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(clientDist, 'index.html'), (error) => {
-    if (error) res.status(200).send('Adhahi Dashboard Bot API is running. Build the client with npm run build.');
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: process.uptime()
   });
 });
 
-app.use((error, _req, res, _next) => {
-  logger.error(error.message, { stack: error.stack });
-  res.status(error.status || 500).json({ message: error.message || 'خطأ داخلي في السيرفر' });
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    environment: config.nodeEnv,
+    targetWilaya: config.targetWilaya,
+    timestamp: new Date().toISOString()
+  });
 });
 
-setupSockets(io);
-setupBot();
+app.use((req, res) => {
+  res.status(404).json({
+    status: 'not_found',
+    path: req.path
+  });
+});
 
-server.listen(env.port, async () => {
-  await setStatus({ server: 'online', bot: 'online' });
-  await addLog('success', `السيرفر يعمل على المنفذ ${env.port}`);
-  logger.info(`Server listening on ${env.port}`);
+app.use((error, req, res, next) => {
+  logger.error('Request failed', {
+    error: error.message,
+    path: req.path
+  });
+  res.status(500).json({
+    status: 'error',
+    message: 'Internal server error'
+  });
+});
+
+const server = app.listen(config.port, async () => {
+  logger.success(`Server started on port ${config.port}`);
+  logger.info('Railway runtime config loaded', {
+    nodeEnv: config.nodeEnv,
+    targetUrl: config.targetUrl,
+    targetWilaya: config.targetWilaya,
+    headless: config.headless
+  });
+
+  startBot();
+  await notifyServerStarted();
+});
+
+server.on('error', (error) => {
+  logger.error('Server listen error', {
+    error: error.message,
+    code: error.code
+  });
 });
 
 async function shutdown(signal) {
-  logger.info(`Received ${signal}, shutting down`);
-  await addLog('warning', `إيقاف آمن بسبب ${signal}`).catch(() => {});
-  await setStatus({ server: 'stopping', monitoring: false }).catch(() => {});
-  await stopBot().catch(() => {});
-  await browserManager.close().catch(() => {});
-  server.close(() => process.exit(0));
-  setTimeout(() => process.exit(1), 10000).unref();
+  logger.warn(`Received ${signal}; shutting down gracefully`);
+
+  server.close(async () => {
+    await stopBot();
+    await closeBrowser();
+    logger.success('Shutdown complete');
+    process.exit(0);
+  });
+
+  setTimeout(() => {
+    logger.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000).unref();
 }
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('uncaughtException', async (error) => {
-  logger.error(error.message, { stack: error.stack });
-  await addLog('error', 'خطأ غير متوقع', { error: error.message }).catch(() => {});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection', {
+    reason: reason && reason.message ? reason.message : String(reason)
+  });
 });
-process.on('unhandledRejection', async (error) => {
-  logger.error(error?.message || String(error));
-  await addLog('error', 'وعد مرفوض غير معالج', { error: error?.message || String(error) }).catch(() => {});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught exception', {
+    error: error.message,
+    stack: error.stack
+  });
 });

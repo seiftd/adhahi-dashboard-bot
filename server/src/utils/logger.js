@@ -1,26 +1,17 @@
-import fs from 'fs';
-import path from 'path';
-import winston from 'winston';
-import { env } from '../config/env.js';
+function timestamp() {
+  return new Date().toISOString();
+}
 
-const logsDir = path.resolve('logs');
-fs.mkdirSync(logsDir, { recursive: true });
+function write(level, message, meta) {
+  const suffix = meta ? ` ${JSON.stringify(meta)}` : '';
+  console.log(`[${timestamp()}] [${level.toUpperCase()}] ${message}${suffix}`);
+}
 
-const format = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-  winston.format.errors({ stack: true }),
-  winston.format.printf(({ level, message, timestamp, stack, ...meta }) => {
-    const extra = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
-    return `${timestamp} [${level.toUpperCase()}] ${stack || message}${extra}`;
-  })
-);
+const logger = {
+  info: (message, meta) => write('info', message, meta),
+  warn: (message, meta) => write('warn', message, meta),
+  error: (message, meta) => write('error', message, meta),
+  success: (message, meta) => write('success', message, meta)
+};
 
-export const logger = winston.createLogger({
-  level: env.logLevel,
-  format,
-  transports: [
-    new winston.transports.Console({ format: winston.format.combine(winston.format.colorize(), format) }),
-    new winston.transports.File({ filename: path.join(logsDir, 'combined.log') }),
-    new winston.transports.File({ filename: path.join(logsDir, 'error.log'), level: 'error' })
-  ]
-});
+module.exports = { logger };
