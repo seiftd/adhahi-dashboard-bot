@@ -12,7 +12,7 @@ const config = {
   clientUrl: process.env.CLIENT_URL || '',
   targetUrl: process.env.TARGET_URL || 'https://adhahi.dz/register',
   targetWilaya: process.env.TARGET_WILAYA || 'سوق أهراس',
-  headless: String(process.env.HEADLESS || 'true').toLowerCase() !== 'false',
+  headless: true,
   logLevel: process.env.LOG_LEVEL || 'info'
 };
 

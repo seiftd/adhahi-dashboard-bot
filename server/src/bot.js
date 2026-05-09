@@ -1,19 +1,21 @@
 const TelegramBot = require('node-telegram-bot-api');
 const { config } = require('./config');
 const { logger } = require('./utils/logger');
+const monitor = require('./monitor');
 
 let bot;
-const knownChats = new Set();
 
 function getStatusText() {
+  const status = monitor.getStatus();
   return [
-    '📊 حالة سيرفر أضاحي الجزائر',
+    '📊 حالة مراقبة أضاحي الجزائر',
     '',
     '✅ السيرفر: يعمل',
-    `🌍 البيئة: ${config.nodeEnv}`,
     `📍 الولاية: ${config.targetWilaya}`,
-    `🎯 الرابط: ${config.targetUrl}`,
-    `⏱️ مدة التشغيل: ${Math.floor(process.uptime())} ثانية`
+    `📡 المراقبة: ${status.monitoring ? 'تعمل' : 'متوقفة'}`,
+    `🔎 الفحص: ${status.checking ? 'جاري' : 'خامل'}`,
+    `📦 التوفر: ${status.available ? 'متوفر' : 'غير متوفر'}`,
+    `🕒 آخر فحص: ${status.lastCheck || 'لا يوجد'}`
   ].join('\n');
 }
 
@@ -23,9 +25,7 @@ function startBot() {
     return null;
   }
 
-  if (bot) {
-    return bot;
-  }
+  if (bot) return bot;
 
   bot = new TelegramBot(config.botToken, {
     polling: {
@@ -35,23 +35,38 @@ function startBot() {
     }
   });
 
+  monitor.setTelegramSender({
+    sendMessage: (chatId, text, options) => bot.sendMessage(chatId, text, options),
+    sendPhoto: (chatId, photo, options) => bot.sendPhoto(chatId, photo, options)
+  });
+
   bot.on('message', (message) => {
     if (message.chat && message.chat.id) {
-      knownChats.add(message.chat.id);
+      monitor.setUserChatId(message.chat.id);
     }
   });
 
   bot.onText(/\/start/, async (message) => {
-    knownChats.add(message.chat.id);
+    monitor.setUserChatId(message.chat.id);
     await bot.sendMessage(
       message.chat.id,
-      'مرحبًا بك في بوت أضاحي الجزائر 🇩🇿\nاستخدم /status لمعرفة حالة السيرفر.'
+      'مرحبًا بك في بوت مراقبة أضاحي الجزائر 🇩🇿\n\nاستخدم /monitor لبدء مراقبة سوق أهراس.\nاستخدم /stop لإيقاف المراقبة.\nاستخدم /status لمعرفة الحالة.'
     );
   });
 
   bot.onText(/\/status/, async (message) => {
-    knownChats.add(message.chat.id);
+    monitor.setUserChatId(message.chat.id);
     await bot.sendMessage(message.chat.id, getStatusText());
+  });
+
+  bot.onText(/\/monitor/, async (message) => {
+    monitor.startMonitoring(message.chat.id);
+    await bot.sendMessage(message.chat.id, '✅ تم بدء مراقبة سوق أهراس كل 5 ثوانٍ.');
+  });
+
+  bot.onText(/\/stop/, async (message) => {
+    monitor.stopMonitoring();
+    await bot.sendMessage(message.chat.id, '⏹ تم إيقاف المراقبة والتنبيهات.');
   });
 
   bot.on('polling_error', (error) => {
@@ -66,19 +81,12 @@ function startBot() {
 }
 
 async function notifyServerStarted() {
-  if (!bot) return;
+  if (!bot || !config.startupChatId) return;
 
-  if (config.startupChatId) {
-    knownChats.add(config.startupChatId);
-  }
-
-  if (knownChats.size === 0) return;
-
-  await Promise.allSettled(
-    Array.from(knownChats).map((chatId) =>
-      bot.sendMessage(chatId, `🚀 تم تشغيل السيرفر بنجاح\n\n${getStatusText()}`)
-    )
-  );
+  monitor.setUserChatId(config.startupChatId);
+  await bot.sendMessage(config.startupChatId, `🚀 تم تشغيل السيرفر بنجاح\n\n${getStatusText()}`).catch((error) => {
+    logger.error('Failed to send startup Telegram message', { error: error.message });
+  });
 }
 
 async function stopBot() {

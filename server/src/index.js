@@ -4,6 +4,7 @@ const { config } = require('./config');
 const { logger } = require('./utils/logger');
 const { startBot, stopBot, notifyServerStarted } = require('./bot');
 const { closeBrowser } = require('./browser');
+const monitor = require('./monitor');
 
 const PORT = process.env.PORT || 3000;
 const allowedOrigins = [
@@ -35,11 +36,25 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api/status', (req, res) => {
-  res.json({
-    server: 'online',
-    playwright: 'idle',
-    bot: config.botToken ? 'running' : 'not_configured'
-  });
+  res.json(monitor.getStatus());
+});
+
+app.post('/api/start', (req, res) => {
+  res.json(monitor.startMonitoring());
+});
+
+app.post('/api/stop', (req, res) => {
+  res.json(monitor.stopMonitoring());
+});
+
+app.get('/api/screenshot', (req, res) => {
+  const screenshot = monitor.getLastScreenshot();
+  if (!screenshot) {
+    res.status(404).json({ status: 'not_found', message: 'No screenshot captured yet' });
+    return;
+  }
+
+  res.type('png').send(screenshot);
 });
 
 app.get('/health', (req, res) => {
@@ -98,6 +113,7 @@ async function shutdown(signal) {
   logger.warn(`Received ${signal}; shutting down gracefully`);
 
   server.close(async () => {
+    monitor.stopMonitoring();
     await stopBot();
     await closeBrowser();
     logger.success('Shutdown complete');
