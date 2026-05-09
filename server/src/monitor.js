@@ -2,6 +2,13 @@ const { config } = require('./config');
 const { createPage } = require('./browser');
 const { logger } = require('./utils/logger');
 
+const UNAVAILABLE_TEXT = '\u062d\u062c\u0632 \u063a\u064a\u0631 \u0645\u062a\u0648\u0641\u0631 \u062d\u0627\u0644\u064a\u0627';
+const SEARCH_PLACEHOLDERS = {
+  wilaya: '\u0648\u0644\u0627\u064a\u0629',
+  theWilaya: '\u0627\u0644\u0648\u0644\u0627\u064a\u0629',
+  search: '\u0628\u062d\u062b'
+};
+
 let isMonitoring = false;
 let monitorTimer = null;
 let alertInterval = null;
@@ -45,9 +52,9 @@ function getStatus() {
 async function findAndFillSearch(page) {
   const selectors = [
     'input[type="search"]',
-    'input[placeholder*="ولاية"]',
-    'input[placeholder*="الولاية"]',
-    'input[placeholder*="بحث"]',
+    `input[placeholder*="${SEARCH_PLACEHOLDERS.wilaya}"]`,
+    `input[placeholder*="${SEARCH_PLACEHOLDERS.theWilaya}"]`,
+    `input[placeholder*="${SEARCH_PLACEHOLDERS.search}"]`,
     'input[name*="wilaya" i]',
     'input[name*="search" i]',
     'input[type="text"]',
@@ -101,7 +108,7 @@ async function checkAvailability() {
     await page.waitForTimeout(2500);
 
     const pageText = await page.locator('body').innerText({ timeout: 10000 }).catch(() => '');
-    const unavailableTextExists = pageText.includes('حجز غير متوفر حاليا');
+    const unavailableTextExists = pageText.includes(UNAVAILABLE_TEXT);
     available = !unavailableTextExists;
 
     lastScreenshot = await page.screenshot({
@@ -140,7 +147,7 @@ async function sendAvailabilityAlert(message) {
 
   if (lastScreenshot) {
     await telegram.sendPhoto(userChatId, lastScreenshot, {
-      caption: '📸 لقطة شاشة من صفحة أضاحي'
+      caption: '\ud83d\udcf8 \u0644\u0642\u0637\u0629 \u0634\u0627\u0634\u0629 \u0645\u0646 \u0635\u0641\u062d\u0629 \u0623\u0636\u0627\u062d\u064a'
     }).catch((error) => {
       logger.error('Failed to send Telegram screenshot', { error: error.message });
     });
@@ -151,7 +158,7 @@ function startAlertSpam() {
   if (alertInterval) return;
 
   alertInterval = setInterval(async () => {
-    await sendAvailabilityAlert('🚨🚨 سوق أهراس متوفرة الآن !!!');
+    await sendAvailabilityAlert('\ud83d\udea8\ud83d\udea8 \u0633\u0648\u0642 \u0623\u0647\u0631\u0627\u0633 \u0645\u062a\u0648\u0641\u0631\u0629 \u0627\u0644\u0622\u0646 !!!');
   }, 3000);
 }
 
@@ -161,7 +168,7 @@ async function monitorTick() {
   const isAvailable = await checkAvailability();
   if (!isAvailable) return;
 
-  await sendAvailabilityAlert('🚨 متوفر !!!');
+  await sendAvailabilityAlert('\ud83d\udea8 \u0645\u062a\u0648\u0641\u0631 !!!');
   startAlertSpam();
 }
 

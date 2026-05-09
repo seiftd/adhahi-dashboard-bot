@@ -11,7 +11,7 @@ const config = {
   checkInterval: Number(process.env.CHECK_INTERVAL || 5000),
   clientUrl: process.env.CLIENT_URL || '',
   targetUrl: process.env.TARGET_URL || 'https://adhahi.dz/register',
-  targetWilaya: process.env.TARGET_WILAYA || 'سوق أهراس',
+  targetWilaya: process.env.TARGET_WILAYA || '\u0633\u0648\u0642 \u0623\u0647\u0631\u0627\u0633',
   headless: true,
   logLevel: process.env.LOG_LEVEL || 'info'
 };
