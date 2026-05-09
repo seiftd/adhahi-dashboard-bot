@@ -9,9 +9,9 @@ async function getBrowser() {
     return browser;
   }
 
-  logger.info('Starting Playwright Chromium', { headless: config.headless });
+  logger.info('Starting Playwright Chromium', { headless: true });
   browser = await chromium.launch({
-    headless: config.headless,
+    headless: true,
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',

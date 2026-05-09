@@ -5,15 +5,40 @@ const { logger } = require('./utils/logger');
 const { startBot, stopBot, notifyServerStarted } = require('./bot');
 const { closeBrowser } = require('./browser');
 
+const PORT = process.env.PORT || 3000;
+const allowedOrigins = [
+  'https://adhahi-dashboard-bot.vercel.app'
+];
+
 const app = express();
 
-app.use(cors({ origin: config.clientUrl || true }));
-app.use(express.json({ limit: '1mb' }));
+app.use(cors({
+  origin: allowedOrigins,
+  methods: ['GET', 'POST'],
+  credentials: true
+}));
+app.use(express.json());
+
+app.use((req, res, next) => {
+  logger.info('API request', {
+    method: req.method,
+    path: req.path,
+    origin: req.headers.origin || 'none'
+  });
+  next();
+});
 
 app.get('/', (req, res) => {
   res.json({
-    status: 'ok',
-    uptime: process.uptime()
+    status: 'ok'
+  });
+});
+
+app.get('/api/status', (req, res) => {
+  res.json({
+    server: 'online',
+    playwright: 'idle',
+    bot: config.botToken ? 'running' : 'not_configured'
   });
 });
 
@@ -28,6 +53,10 @@ app.get('/health', (req, res) => {
 });
 
 app.use((req, res) => {
+  logger.warn('Route not found', {
+    method: req.method,
+    path: req.path
+  });
   res.status(404).json({
     status: 'not_found',
     path: req.path
@@ -45,8 +74,8 @@ app.use((error, req, res, next) => {
   });
 });
 
-const server = app.listen(config.port, async () => {
-  logger.success(`Server started on port ${config.port}`);
+const server = app.listen(PORT, async () => {
+  logger.success(`Server started on port ${PORT}`);
   logger.info('Railway runtime config loaded', {
     nodeEnv: config.nodeEnv,
     targetUrl: config.targetUrl,
